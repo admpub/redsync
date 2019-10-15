@@ -102,7 +102,13 @@ func (m *Mutex) acquire(pool Pool, value string) (bool, error) {
 	conn := pool.Get()
 	defer conn.Close()
 	reply, err := redis.String(conn.Do("SET", m.name, value, "NX", "PX", int(m.expiry/time.Millisecond)))
-	return err == nil && reply == "OK", err
+	if err != nil {
+		if err == redis.ErrNil {
+			return false, nil
+		}
+		return false, err
+	}
+	return reply == "OK", nil
 }
 
 var deleteScript = redis.NewScript(1, `
