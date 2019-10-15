@@ -163,7 +163,7 @@ func (m *Mutex) actOnPoolsAsync(actFn func(Pool) (bool, error)) (int, error) {
 		r := <-ch
 		if r.Status {
 			n++
-		} else {
+		} else if r.Err != nil {
 			err = multierror.Append(err, r.Err)
 		}
 	}
