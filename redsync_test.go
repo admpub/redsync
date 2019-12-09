@@ -7,7 +7,7 @@ import (
 
 	"github.com/applinskinner/redsync/redis/goredis"
 	"github.com/applinskinner/redsync/redis/redigo"
-	goredislib "github.com/go-redis/redis"
+	goredislib "github.com/go-redis/redis/v7"
 	redigolib "github.com/gomodule/redigo/redis"
 
 	"github.com/applinskinner/redsync/redis"

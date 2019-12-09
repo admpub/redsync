@@ -1,10 +1,10 @@
 package main
 
 import (
-	goredislib "github.com/go-redis/redis"
 	"github.com/applinskinner/redsync"
 	"github.com/applinskinner/redsync/redis"
 	"github.com/applinskinner/redsync/redis/goredis"
+	goredislib "github.com/go-redis/redis/v7"
 	"github.com/stvp/tempredis"
 )
 

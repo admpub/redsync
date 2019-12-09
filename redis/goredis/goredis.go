@@ -1,10 +1,11 @@
 package goredis
 
 import (
-	"github.com/go-redis/redis"
-	redsyncredis "github.com/applinskinner/redsync/redis"
 	"strings"
 	"time"
+
+	redsyncredis "github.com/applinskinner/redsync/redis"
+	"github.com/go-redis/redis/v7"
 )
 
 type GoredisPool struct {
