@@ -1,14 +1,17 @@
 package redsync
 
-import "time"
+import (
+	"github.com/applinskinner/redsync/redis"
+	"time"
+)
 
 // Redsync provides a simple method for creating distributed mutexes using multiple Redis connection pools.
 type Redsync struct {
-	pools []Pool
+	pools []redis.Pool
 }
 
 // New creates and returns a new Redsync instance from given Redis connection pools.
-func New(pools []Pool) *Redsync {
+func New(pools []redis.Pool) *Redsync {
 	return &Redsync{
 		pools: pools,
 	}
