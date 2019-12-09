@@ -5,7 +5,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/gomodule/redigo/redis"
+	"github.com/applinskinner/redsync/redis/redigo"
+
+	"github.com/applinskinner/redsync/redis"
+	redigoredis "github.com/gomodule/redigo/redis"
 	"github.com/stvp/tempredis"
 )
 
@@ -96,7 +99,7 @@ func TestMutexFailure(t *testing.T) {
 
 	pools := newMockPools(8, servers)
 
-	okayPools := []Pool{}
+	okayPools := []redis.Pool{}
 	for i, v := range pools {
 		if i == 2 || i == 6 {
 			continue
@@ -116,21 +119,21 @@ func TestMutexFailure(t *testing.T) {
 	assertAcquired(t, okayPools, mutex)
 }
 
-func newMockPools(n int, servers []*tempredis.Server) []Pool {
-	pools := []Pool{}
+func newMockPools(n int, servers []*tempredis.Server) []redis.Pool {
+	pools := []redis.Pool{}
 	for _, server := range servers {
 		func(server *tempredis.Server) {
-			pools = append(pools, &redis.Pool{
+			pools = append(pools, redigo.NewRedigoPool(&redigoredis.Pool{
 				MaxIdle:     3,
 				IdleTimeout: 240 * time.Second,
-				Dial: func() (redis.Conn, error) {
-					return redis.Dial("unix", server.Socket())
+				Dial: func() (redigoredis.Conn, error) {
+					return redigoredis.Dial("unix", server.Socket())
 				},
-				TestOnBorrow: func(c redis.Conn, t time.Time) error {
+				TestOnBorrow: func(c redigoredis.Conn, t time.Time) error {
 					_, err := c.Do("PING")
 					return err
 				},
-			})
+			}))
 		}(server)
 		if len(pools) == n {
 			break
@@ -139,13 +142,13 @@ func newMockPools(n int, servers []*tempredis.Server) []Pool {
 	return pools
 }
 
-func getPoolValues(pools []Pool, name string) []string {
+func getPoolValues(pools []redis.Pool, name string) []string {
 	values := []string{}
 	for _, pool := range pools {
 		conn := pool.Get()
-		value, err := redis.String(conn.Do("GET", name))
+		value, err := conn.Get(name)
 		conn.Close()
-		if err != nil && err != redis.ErrNil {
+		if err != nil {
 			panic(err)
 		}
 		values = append(values, value)
@@ -153,21 +156,21 @@ func getPoolValues(pools []Pool, name string) []string {
 	return values
 }
 
-func getPoolExpiries(pools []Pool, name string) []int {
+func getPoolExpiries(pools []redis.Pool, name string) []int {
 	expiries := []int{}
 	for _, pool := range pools {
 		conn := pool.Get()
-		expiry, err := redis.Int(conn.Do("PTTL", name))
+		expiry, err := conn.PTTL(name)
 		conn.Close()
-		if err != nil && err != redis.ErrNil {
+		if err != nil {
 			panic(err)
 		}
-		expiries = append(expiries, expiry)
+		expiries = append(expiries, int(expiry))
 	}
 	return expiries
 }
 
-func clogPools(pools []Pool, mask int, mutex *Mutex) int {
+func clogPools(pools []redis.Pool, mask int, mutex *Mutex) int {
 	n := 0
 	for i, pool := range pools {
 		if mask&(1<<uint(i)) == 0 {
@@ -175,7 +178,7 @@ func clogPools(pools []Pool, mask int, mutex *Mutex) int {
 			continue
 		}
 		conn := pool.Get()
-		_, err := conn.Do("SET", mutex.name, "foobar")
+		_, err := conn.Set(mutex.name, "foobar")
 		conn.Close()
 		if err != nil {
 			panic(err)
@@ -184,7 +187,7 @@ func clogPools(pools []Pool, mask int, mutex *Mutex) int {
 	return n
 }
 
-func newTestMutexes(pools []Pool, name string, n int) []*Mutex {
+func newTestMutexes(pools []redis.Pool, name string, n int) []*Mutex {
 	mutexes := []*Mutex{}
 	for i := 0; i < n; i++ {
 		mutexes = append(mutexes, &Mutex{
@@ -201,7 +204,7 @@ func newTestMutexes(pools []Pool, name string, n int) []*Mutex {
 	return mutexes
 }
 
-func assertAcquired(t *testing.T, pools []Pool, mutex *Mutex) {
+func assertAcquired(t *testing.T, pools []redis.Pool, mutex *Mutex) {
 	n := 0
 	values := getPoolValues(pools, mutex.name)
 	for _, value := range values {
