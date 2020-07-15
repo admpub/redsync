@@ -33,7 +33,7 @@ func (self *GoredisConn) Get(ctx context.Context, name string) (string, error) {
 
 func (self *GoredisConn) Set(ctx context.Context, name string, value string) (bool, error) {
 	reply, err := self.delegate.Set(ctx, name, value, 0).Result()
-	return err == nil && reply == "OK", nil
+	return err == nil && reply == "OK", err
 }
 
 func (self *GoredisConn) SetNX(ctx context.Context, name string, value string, expiry time.Duration) (bool, error) {
@@ -77,11 +77,8 @@ func (self *GoredisConn) Close() error {
 }
 
 func noErrNil(err error) error {
-
 	if err != nil && err.Error() == "redis: nil" {
 		return nil
-	} else {
-		return err
 	}
-
+	return err
 }
