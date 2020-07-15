@@ -1,11 +1,12 @@
 package goredis
 
 import (
+	"context"
 	"strings"
 	"time"
 
-	redsyncredis "github.com/applinskinner/redsync/redis"
-	"github.com/go-redis/redis/v7"
+	redsyncredis "github.com/admpub/redsync/redis"
+	"github.com/go-redis/redis/v8"
 )
 
 type GoredisPool struct {
@@ -24,26 +25,26 @@ type GoredisConn struct {
 	delegate *redis.Client
 }
 
-func (self *GoredisConn) Get(name string) (string, error) {
-	value, err := self.delegate.Get(name).Result()
+func (self *GoredisConn) Get(ctx context.Context, name string) (string, error) {
+	value, err := self.delegate.Get(ctx, name).Result()
 	err = noErrNil(err)
 	return value, err
 }
 
-func (self *GoredisConn) Set(name string, value string) (bool, error) {
-	reply, err := self.delegate.Set(name, value, 0).Result()
+func (self *GoredisConn) Set(ctx context.Context, name string, value string) (bool, error) {
+	reply, err := self.delegate.Set(ctx, name, value, 0).Result()
 	return err == nil && reply == "OK", nil
 }
 
-func (self *GoredisConn) SetNX(name string, value string, expiry time.Duration) (bool, error) {
-	return self.delegate.SetNX(name, value, expiry).Result()
+func (self *GoredisConn) SetNX(ctx context.Context, name string, value string, expiry time.Duration) (bool, error) {
+	return self.delegate.SetNX(ctx, name, value, expiry).Result()
 }
 
-func (self *GoredisConn) PTTL(name string) (time.Duration, error) {
-	return self.delegate.PTTL(name).Result()
+func (self *GoredisConn) PTTL(ctx context.Context, name string) (time.Duration, error) {
+	return self.delegate.PTTL(ctx, name).Result()
 }
 
-func (self *GoredisConn) Eval(script *redsyncredis.Script, keysAndArgs ...interface{}) (interface{}, error) {
+func (self *GoredisConn) Eval(ctx context.Context, script *redsyncredis.Script, keysAndArgs ...interface{}) (interface{}, error) {
 	var keys []string
 	var args []interface{}
 
@@ -62,9 +63,9 @@ func (self *GoredisConn) Eval(script *redsyncredis.Script, keysAndArgs ...interf
 		args = keysAndArgs
 	}
 
-	v, err := self.delegate.EvalSha(script.Hash, keys, args...).Result()
+	v, err := self.delegate.EvalSha(ctx, script.Hash, keys, args...).Result()
 	if err != nil && strings.HasPrefix(err.Error(), "NOSCRIPT ") {
-		v, err = self.delegate.Eval(script.Src, keys, args...).Result()
+		v, err = self.delegate.Eval(ctx, script.Src, keys, args...).Result()
 	}
 	err = noErrNil(err)
 	return v, err

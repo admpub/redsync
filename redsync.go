@@ -1,8 +1,9 @@
 package redsync
 
 import (
-	"github.com/applinskinner/redsync/redis"
 	"time"
+
+	"github.com/admpub/redsync/redis"
 )
 
 // Redsync provides a simple method for creating distributed mutexes using multiple Redis connection pools.

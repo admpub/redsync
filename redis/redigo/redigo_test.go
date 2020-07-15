@@ -1,6 +1,6 @@
 package redigo
 
-import "github.com/applinskinner/redsync/redis"
+import "github.com/admpub/redsync/redis"
 
 var _ (redis.Conn) = (*RedigoConn)(nil)
 

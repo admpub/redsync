@@ -1,13 +1,14 @@
 package redsync
 
 import (
+	"context"
 	"strconv"
 	"testing"
 	"time"
 
-	"github.com/applinskinner/redsync/redis/redigo"
+	"github.com/admpub/redsync/redis/redigo"
 
-	"github.com/applinskinner/redsync/redis"
+	"github.com/admpub/redsync/redis"
 	redigoredis "github.com/gomodule/redigo/redis"
 	"github.com/stvp/tempredis"
 )
@@ -16,13 +17,14 @@ func TestMutex(t *testing.T) {
 	pools := newMockPools(8, servers)
 	mutexes := newTestMutexes(pools, "test-mutex", 8)
 	orderCh := make(chan int)
+	ctx := context.Background()
 	for i, mutex := range mutexes {
 		go func(i int, mutex *Mutex) {
-			err := mutex.Lock()
+			err := mutex.Lock(ctx)
 			if err != nil {
 				t.Fatalf("Expected err == nil, got %q", err)
 			}
-			defer mutex.Unlock()
+			defer mutex.Unlock(ctx)
 
 			assertAcquired(t, pools, mutex)
 
@@ -39,16 +41,17 @@ func TestMutexExtend(t *testing.T) {
 	mutexes := newTestMutexes(pools, "test-mutex-extend", 1)
 	mutex := mutexes[0]
 
-	err := mutex.Lock()
+	ctx := context.Background()
+	err := mutex.Lock(ctx)
 	if err != nil {
 		t.Fatalf("Expected err == nil, got %q", err)
 	}
-	defer mutex.Unlock()
+	defer mutex.Unlock(ctx)
 
 	time.Sleep(1 * time.Second)
 
 	expiries := getPoolExpiries(pools, mutex.name)
-	ok, err := mutex.Extend()
+	ok, err := mutex.Extend(ctx)
 	if err != nil {
 		t.Fatalf("Expected err == nil, got %q", err)
 	}
@@ -66,6 +69,7 @@ func TestMutexExtend(t *testing.T) {
 
 func TestMutexQuorum(t *testing.T) {
 	pools := newMockPools(4, servers)
+	ctx := context.Background()
 	for mask := 0; mask < 1<<uint(len(pools)); mask++ {
 		mutexes := newTestMutexes(pools, "test-mutex-partial-"+strconv.Itoa(mask), 1)
 		mutex := mutexes[0]
@@ -74,13 +78,13 @@ func TestMutexQuorum(t *testing.T) {
 		n := clogPools(pools, mask, mutex)
 
 		if n >= len(pools)/2+1 {
-			err := mutex.Lock()
+			err := mutex.Lock(ctx)
 			if err != nil {
 				t.Fatalf("Expected err == nil, got %q", err)
 			}
 			assertAcquired(t, pools, mutex)
 		} else {
-			err := mutex.Lock()
+			err := mutex.Lock(ctx)
 			if err != ErrFailed {
 				t.Fatalf("Expected err == %q, got %q", ErrFailed, err)
 			}
@@ -112,12 +116,13 @@ func TestMutexFailure(t *testing.T) {
 
 	mutexes := newTestMutexes(pools, "test-mutex-extend", 1)
 	mutex := mutexes[0]
+	ctx := context.Background()
 
-	err := mutex.Lock()
+	err := mutex.Lock(ctx)
 	if err != nil {
 		t.Fatalf("Expected err == nil, got %q", err)
 	}
-	defer mutex.Unlock()
+	defer mutex.Unlock(ctx)
 
 	assertAcquired(t, okayPools, mutex)
 }
@@ -127,14 +132,15 @@ func TestValid(t *testing.T) {
 	rs := New(pools)
 	key := "test-shared-lock"
 
+	ctx := context.Background()
 	mutex1 := rs.NewMutex(key, SetExpiry(time.Hour))
-	err := mutex1.Lock()
+	err := mutex1.Lock(ctx)
 	if err != nil {
 		t.Fatalf("Expected err != nil, got: %q", err)
 	}
 	assertAcquired(t, pools, mutex1)
 
-	ok, err := mutex1.Valid()
+	ok, err := mutex1.Valid(ctx)
 	if err != nil {
 		t.Fatalf("Expected err != nil, got: %q", err)
 	}
@@ -143,14 +149,14 @@ func TestValid(t *testing.T) {
 	}
 
 	mutex2 := rs.NewMutex(key)
-	err = mutex2.Lock()
+	err = mutex2.Lock(ctx)
 	if err == nil {
 		t.Fatalf("Expected err == nil, got: %q", err)
 	}
 }
 
-func newMockPools(n int, servers []*tempredis.Server) []Pool {
-	pools := []Pool{}
+func newMockPools(n int, servers []*tempredis.Server) []redis.Pool {
+	pools := []redis.Pool{}
 	for _, server := range servers {
 		func(server *tempredis.Server) {
 			pools = append(pools, redigo.NewRedigoPool(&redigoredis.Pool{
@@ -174,9 +180,10 @@ func newMockPools(n int, servers []*tempredis.Server) []Pool {
 
 func getPoolValues(pools []redis.Pool, name string) []string {
 	values := []string{}
+	ctx := context.Background()
 	for _, pool := range pools {
 		conn := pool.Get()
-		value, err := conn.Get(name)
+		value, err := conn.Get(ctx, name)
 		conn.Close()
 		if err != nil {
 			panic(err)
@@ -188,9 +195,10 @@ func getPoolValues(pools []redis.Pool, name string) []string {
 
 func getPoolExpiries(pools []redis.Pool, name string) []int {
 	expiries := []int{}
+	ctx := context.Background()
 	for _, pool := range pools {
 		conn := pool.Get()
-		expiry, err := conn.PTTL(name)
+		expiry, err := conn.PTTL(ctx, name)
 		conn.Close()
 		if err != nil {
 			panic(err)
@@ -202,13 +210,14 @@ func getPoolExpiries(pools []redis.Pool, name string) []int {
 
 func clogPools(pools []redis.Pool, mask int, mutex *Mutex) int {
 	n := 0
+	ctx := context.Background()
 	for i, pool := range pools {
 		if mask&(1<<uint(i)) == 0 {
 			n++
 			continue
 		}
 		conn := pool.Get()
-		_, err := conn.Set(mutex.name, "foobar")
+		_, err := conn.Set(ctx, mutex.name, "foobar")
 		conn.Close()
 		if err != nil {
 			panic(err)

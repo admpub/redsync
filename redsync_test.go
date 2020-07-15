@@ -1,16 +1,17 @@
 package redsync
 
 import (
+	"context"
 	"os"
 	"testing"
 	"time"
 
-	"github.com/applinskinner/redsync/redis/goredis"
-	"github.com/applinskinner/redsync/redis/redigo"
-	goredislib "github.com/go-redis/redis/v7"
+	"github.com/admpub/redsync/redis/goredis"
+	"github.com/admpub/redsync/redis/redigo"
+	goredislib "github.com/go-redis/redis/v8"
 	redigolib "github.com/gomodule/redigo/redis"
 
-	"github.com/applinskinner/redsync/redis"
+	"github.com/admpub/redsync/redis"
 	"github.com/stvp/tempredis"
 )
 
@@ -57,11 +58,12 @@ func TestMain(m *testing.M) {
 }
 
 func TestRedsync(t *testing.T) {
+	ctx := context.Background()
 	pools := newMockPools(8, servers)
 	rs := New(pools)
 
 	mutex := rs.NewMutex("test-redsync")
-	err := mutex.Lock()
+	err := mutex.Lock(ctx)
 	if err != nil {
 
 	}

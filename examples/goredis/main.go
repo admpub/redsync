@@ -1,10 +1,12 @@
 package main
 
 import (
-	"github.com/applinskinner/redsync"
-	"github.com/applinskinner/redsync/redis"
-	"github.com/applinskinner/redsync/redis/goredis"
-	goredislib "github.com/go-redis/redis/v7"
+	"context"
+
+	"github.com/admpub/redsync"
+	"github.com/admpub/redsync/redis"
+	"github.com/admpub/redsync/redis/goredis"
+	goredislib "github.com/go-redis/redis/v8"
 	"github.com/stvp/tempredis"
 )
 
@@ -25,12 +27,13 @@ func main() {
 
 	rs := redsync.New([]redis.Pool{pool})
 
+	ctx := context.Background()
 	mutex := rs.NewMutex("test-redsync")
-	err = mutex.Lock()
+	err = mutex.Lock(ctx)
 
 	if err != nil {
 		panic(err)
 	}
 
-	mutex.Unlock()
+	mutex.Unlock(ctx)
 }

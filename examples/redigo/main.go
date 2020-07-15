@@ -1,12 +1,14 @@
 package main
 
 import (
-	"github.com/applinskinner/redsync"
-	"github.com/applinskinner/redsync/redis"
-	"github.com/applinskinner/redsync/redis/redigo"
+	"context"
+	"time"
+
+	"github.com/admpub/redsync"
+	"github.com/admpub/redsync/redis"
+	"github.com/admpub/redsync/redis/redigo"
 	redigolib "github.com/gomodule/redigo/redis"
 	"github.com/stvp/tempredis"
-	"time"
 )
 
 func main() {
@@ -31,12 +33,13 @@ func main() {
 
 	rs := redsync.New([]redis.Pool{pool})
 
+	ctx := context.Background()
 	mutex := rs.NewMutex("test-redsync")
-	err = mutex.Lock()
+	err = mutex.Lock(ctx)
 
 	if err != nil {
 		panic(err)
 	}
 
-	mutex.Unlock()
+	mutex.Unlock(ctx)
 }
