@@ -3,6 +3,7 @@ module github.com/admpub/redsync
 go 1.13
 
 require (
+	github.com/go-redis/redis/v7 v7.4.0
 	github.com/go-redis/redis/v8 v8.0.0-beta.6
 	github.com/gomodule/redigo v2.0.0+incompatible
 	github.com/hashicorp/go-multierror v1.1.0

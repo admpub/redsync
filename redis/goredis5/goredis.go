@@ -9,42 +9,42 @@ import (
 	"gopkg.in/redis.v5"
 )
 
-type GoredisPool struct {
+type Pool struct {
 	delegate *redis.Client
 }
 
-func (self *GoredisPool) Get() redsyncredis.Conn {
-	return &GoredisConn{self.delegate}
+func (self *Pool) Get() redsyncredis.Conn {
+	return &Conn{self.delegate}
 }
 
-func NewGoredisPool(delegate *redis.Client) *GoredisPool {
-	return &GoredisPool{delegate}
+func NewPool(delegate *redis.Client) *Pool {
+	return &Pool{delegate}
 }
 
-type GoredisConn struct {
+type Conn struct {
 	delegate *redis.Client
 }
 
-func (self *GoredisConn) Get(ctx context.Context, name string) (string, error) {
+func (self *Conn) Get(ctx context.Context, name string) (string, error) {
 	value, err := self.delegate.Get(name).Result()
 	err = noErrNil(err)
 	return value, err
 }
 
-func (self *GoredisConn) Set(ctx context.Context, name string, value string) (bool, error) {
+func (self *Conn) Set(ctx context.Context, name string, value string) (bool, error) {
 	reply, err := self.delegate.Set(name, value, 0).Result()
 	return err == nil && reply == "OK", err
 }
 
-func (self *GoredisConn) SetNX(ctx context.Context, name string, value string, expiry time.Duration) (bool, error) {
+func (self *Conn) SetNX(ctx context.Context, name string, value string, expiry time.Duration) (bool, error) {
 	return self.delegate.SetNX(name, value, expiry).Result()
 }
 
-func (self *GoredisConn) PTTL(ctx context.Context, name string) (time.Duration, error) {
+func (self *Conn) PTTL(ctx context.Context, name string) (time.Duration, error) {
 	return self.delegate.PTTL(name).Result()
 }
 
-func (self *GoredisConn) Eval(ctx context.Context, script *redsyncredis.Script, keysAndArgs ...interface{}) (interface{}, error) {
+func (self *Conn) Eval(ctx context.Context, script *redsyncredis.Script, keysAndArgs ...interface{}) (interface{}, error) {
 	var keys []string
 	var args []interface{}
 
@@ -71,17 +71,14 @@ func (self *GoredisConn) Eval(ctx context.Context, script *redsyncredis.Script, 
 	return v, err
 }
 
-func (self *GoredisConn) Close() error {
+func (self *Conn) Close() error {
 	// Not needed for this library
 	return nil
 }
 
 func noErrNil(err error) error {
-
 	if err != nil && err.Error() == "redis: nil" {
 		return nil
-	} else {
-		return err
 	}
-
+	return err
 }

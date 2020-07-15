@@ -159,7 +159,7 @@ func newMockPools(n int, servers []*tempredis.Server) []redis.Pool {
 	pools := []redis.Pool{}
 	for _, server := range servers {
 		func(server *tempredis.Server) {
-			pools = append(pools, redigo.NewRedigoPool(&redigoredis.Pool{
+			pools = append(pools, redigo.NewPool(&redigoredis.Pool{
 				MaxIdle:     3,
 				IdleTimeout: 240 * time.Second,
 				Dial: func() (redigoredis.Conn, error) {

@@ -78,7 +78,7 @@ func newMockPoolsRedigo(n int) []redis.Pool {
 
 	for i := offset; i < offset+SERVER_POOL_SIZE; i++ {
 		func(server *tempredis.Server) {
-			pools = append(pools, redigo.NewRedigoPool(&redigolib.Pool{
+			pools = append(pools, redigo.NewPool(&redigolib.Pool{
 				MaxIdle:     3,
 				IdleTimeout: 240 * time.Second,
 				Dial: func() (redigolib.Conn, error) {
@@ -111,7 +111,7 @@ func newMockPoolsGoredis(n int) []redis.Pool {
 				Addr:    server.Socket(),
 			})
 
-			pools = append(pools, goredis.NewGoredisPool(client))
+			pools = append(pools, goredis.NewPool(client))
 		}(servers[i])
 		if len(pools) == n {
 			break
