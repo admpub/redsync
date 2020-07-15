@@ -6,8 +6,8 @@ import (
 	"github.com/admpub/redsync"
 	"github.com/admpub/redsync/redis"
 	"github.com/admpub/redsync/redis/goredis"
+	goredislib "github.com/go-redis/redis/v8"
 	"github.com/stvp/tempredis"
-	goredislib "gopkg.in/redis.v8"
 )
 
 func main() {
