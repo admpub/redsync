@@ -79,8 +79,6 @@ func TestRedsync(t *testing.T) {
 			assertAcquired(t, v.pools, mutex)
 		})
 	}
-
-	assertAcquired(t, pools, mutex)
 }
 
 func newMockPoolsRedigo(n int) []redis.Pool {

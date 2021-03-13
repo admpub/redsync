@@ -13,8 +13,11 @@ type Pool struct {
 	delegate *redis.Client
 }
 
-func (self *Pool) Get() redsyncredis.Conn {
-	return &Conn{self.delegate}
+func (self *Pool) Get(ctx context.Context) (redsyncredis.Conn, error) {
+	return &Conn{
+		delegate: self.delegate,
+		context:  ctx,
+	}, nil
 }
 
 func NewPool(delegate *redis.Client) *Pool {
@@ -23,28 +26,29 @@ func NewPool(delegate *redis.Client) *Pool {
 
 type Conn struct {
 	delegate *redis.Client
+	context  context.Context
 }
 
-func (self *Conn) Get(ctx context.Context, name string) (string, error) {
+func (self *Conn) Get(name string) (string, error) {
 	value, err := self.delegate.Get(name).Result()
 	err = noErrNil(err)
 	return value, err
 }
 
-func (self *Conn) Set(ctx context.Context, name string, value string) (bool, error) {
+func (self *Conn) Set(name string, value string) (bool, error) {
 	reply, err := self.delegate.Set(name, value, 0).Result()
 	return err == nil && reply == "OK", err
 }
 
-func (self *Conn) SetNX(ctx context.Context, name string, value string, expiry time.Duration) (bool, error) {
+func (self *Conn) SetNX(name string, value string, expiry time.Duration) (bool, error) {
 	return self.delegate.SetNX(name, value, expiry).Result()
 }
 
-func (self *Conn) PTTL(ctx context.Context, name string) (time.Duration, error) {
+func (self *Conn) PTTL(name string) (time.Duration, error) {
 	return self.delegate.PTTL(name).Result()
 }
 
-func (self *Conn) Eval(ctx context.Context, script *redsyncredis.Script, keysAndArgs ...interface{}) (interface{}, error) {
+func (self *Conn) Eval(script *redsyncredis.Script, keysAndArgs ...interface{}) (interface{}, error) {
 	var keys []string
 	var args []interface{}
 

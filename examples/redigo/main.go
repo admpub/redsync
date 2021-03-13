@@ -30,7 +30,6 @@ func main() {
 
 	rs := redsync.New(pool)
 
-	ctx := context.Background()
 	mutex := rs.NewMutex("test-redsync")
 
 	if err = mutex.Lock(); err != nil {

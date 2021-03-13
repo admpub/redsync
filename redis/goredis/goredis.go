@@ -77,4 +77,5 @@ func noErrNil(err error) error {
 	if err == redis.Nil {
 		return nil
 	}
+	return err
 }

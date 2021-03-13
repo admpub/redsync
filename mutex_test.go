@@ -199,7 +199,6 @@ func TestMutexLockUnlockSplit(t *testing.T) {
 			}
 		})
 	}
-	return pools
 }
 
 func getPoolValues(pools []redis.Pool, name string) []string {
@@ -244,7 +243,7 @@ func clogPools(pools []redis.Pool, mask int, mutex *Mutex) int {
 			n++
 			continue
 		}
-		conn, err := pool.Get(nil)
+		conn, err := pool.Get(ctx)
 		if err != nil {
 			panic(err)
 		}
