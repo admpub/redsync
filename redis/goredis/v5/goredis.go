@@ -5,7 +5,7 @@ import (
 	"strings"
 	"time"
 
-	redsyncredis "github.com/admpub/redsync/redis"
+	redsyncredis "github.com/admpub/redsync/v4/redis"
 	"gopkg.in/redis.v5"
 )
 

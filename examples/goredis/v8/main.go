@@ -1,9 +1,11 @@
 package main
 
 import (
+	"context"
+
 	"github.com/admpub/redsync/v4"
-	"github.com/admpub/redsync/v4/redis/goredis"
-	goredislib "github.com/go-redis/redis"
+	"github.com/admpub/redsync/v4/redis/goredis/v8"
+	goredislib "github.com/go-redis/redis/v8"
 	"github.com/stvp/tempredis"
 )
 
@@ -23,14 +25,14 @@ func main() {
 
 	rs := redsync.New(pool)
 
-	ctx := context.Background()
 	mutex := rs.NewMutex("test-redsync")
+	ctx := context.Background()
 
-	if err = mutex.Lock(); err != nil {
+	if err := mutex.LockContext(ctx); err != nil {
 		panic(err)
 	}
 
-	if _, err = mutex.Unlock(); err != nil {
+	if _, err := mutex.UnlockContext(ctx); err != nil {
 		panic(err)
 	}
 }

@@ -1,7 +1,7 @@
 package redigo
 
-import "github.com/admpub/redsync/redis"
+import "github.com/admpub/redsync/v4/redis"
 
-var _ (redis.Conn) = (*Conn)(nil)
+var _ redis.Conn = (*conn)(nil)
 
-var _ (redis.Pool) = (*Pool)(nil)
+var _ redis.Pool = (*pool)(nil)

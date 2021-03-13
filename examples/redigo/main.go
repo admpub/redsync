@@ -1,18 +1,15 @@
 package main
 
 import (
-	"context"
 	"time"
 
-	"github.com/admpub/redsync"
-	"github.com/admpub/redsync/redis"
-	"github.com/admpub/redsync/redis/redigo"
+	"github.com/admpub/redsync/v4"
+	"github.com/admpub/redsync/v4/redis/redigo"
 	redigolib "github.com/gomodule/redigo/redis"
 	"github.com/stvp/tempredis"
 )
 
 func main() {
-
 	server, err := tempredis.Start(tempredis.Config{})
 	if err != nil {
 		panic(err)
@@ -31,15 +28,16 @@ func main() {
 		},
 	})
 
-	rs := redsync.New([]redis.Pool{pool})
+	rs := redsync.New(pool)
 
 	ctx := context.Background()
 	mutex := rs.NewMutex("test-redsync")
-	err = mutex.Lock(ctx)
 
-	if err != nil {
+	if err = mutex.Lock(); err != nil {
 		panic(err)
 	}
 
-	mutex.Unlock(ctx)
+	if _, err = mutex.Unlock(); err != nil {
+		panic(err)
+	}
 }

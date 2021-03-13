@@ -6,7 +6,7 @@ import (
 	"time"
 
 	redsyncredis "github.com/admpub/redsync/v4/redis"
-	"github.com/go-redis/redis"
+	"github.com/go-redis/redis/v7"
 )
 
 type pool struct {
@@ -36,17 +36,15 @@ func (c *conn) Get(name string) (string, error) {
 
 func (c *conn) Set(name string, value string) (bool, error) {
 	reply, err := c.delegate.Set(name, value, 0).Result()
-	return reply == "OK", noErrNil(err)
+	return reply == "OK", err
 }
 
 func (c *conn) SetNX(name string, value string, expiry time.Duration) (bool, error) {
-	ok, err := c.delegate.SetNX(name, value, expiry).Result()
-	return ok, noErrNil(err)
+	return c.delegate.SetNX(name, value, expiry).Result()
 }
 
 func (c *conn) PTTL(name string) (time.Duration, error) {
-	expiry, err := c.delegate.PTTL(name).Result()
-	return expiry, noErrNil(err)
+	return c.delegate.PTTL(name).Result()
 }
 
 func (c *conn) Eval(script *redsyncredis.Script, keysAndArgs ...interface{}) (interface{}, error) {
@@ -57,7 +55,6 @@ func (c *conn) Eval(script *redsyncredis.Script, keysAndArgs ...interface{}) (in
 		for i := 0; i < script.KeyCount; i++ {
 			keys[i] = keysAndArgs[i].(string)
 		}
-
 		args = keysAndArgs[script.KeyCount:]
 	}
 
@@ -73,8 +70,16 @@ func (c *conn) Close() error {
 	return nil
 }
 
+func (c *conn) client(ctx context.Context) *redis.Client {
+	if ctx != nil {
+		return c.delegate.WithContext(ctx)
+	}
+	return c.delegate
+}
+
 func noErrNil(err error) error {
 	if err == redis.Nil {
 		return nil
 	}
+	return err
 }

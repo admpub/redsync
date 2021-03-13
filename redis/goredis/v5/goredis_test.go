@@ -1,6 +1,6 @@
 package goredis5
 
-import "github.com/admpub/redsync/redis"
+import "github.com/admpub/redsync/v4/redis"
 
 var _ (redis.Conn) = (*Conn)(nil)
 

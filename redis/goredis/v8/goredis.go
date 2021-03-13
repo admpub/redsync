@@ -6,47 +6,45 @@ import (
 	"time"
 
 	redsyncredis "github.com/admpub/redsync/v4/redis"
-	"github.com/go-redis/redis"
+	"github.com/go-redis/redis/v8"
 )
 
 type pool struct {
-	delegate *redis.Client
+	delegate redis.UniversalClient
 }
 
 func (p *pool) Get(ctx context.Context) (redsyncredis.Conn, error) {
-	c := p.delegate
-	if ctx != nil {
-		c = c.WithContext(ctx)
+	if ctx == nil {
+		ctx = p.delegate.Context()
 	}
-	return &conn{c}, nil
+	return &conn{p.delegate, ctx}, nil
 }
 
-func NewPool(delegate *redis.Client) redsyncredis.Pool {
+func NewPool(delegate redis.UniversalClient) redsyncredis.Pool {
 	return &pool{delegate}
 }
 
 type conn struct {
-	delegate *redis.Client
+	delegate redis.UniversalClient
+	ctx      context.Context
 }
 
 func (c *conn) Get(name string) (string, error) {
-	value, err := c.delegate.Get(name).Result()
+	value, err := c.delegate.Get(c.ctx, name).Result()
 	return value, noErrNil(err)
 }
 
 func (c *conn) Set(name string, value string) (bool, error) {
-	reply, err := c.delegate.Set(name, value, 0).Result()
-	return reply == "OK", noErrNil(err)
+	reply, err := c.delegate.Set(c.ctx, name, value, 0).Result()
+	return reply == "OK", err
 }
 
 func (c *conn) SetNX(name string, value string, expiry time.Duration) (bool, error) {
-	ok, err := c.delegate.SetNX(name, value, expiry).Result()
-	return ok, noErrNil(err)
+	return c.delegate.SetNX(c.ctx, name, value, expiry).Result()
 }
 
 func (c *conn) PTTL(name string) (time.Duration, error) {
-	expiry, err := c.delegate.PTTL(name).Result()
-	return expiry, noErrNil(err)
+	return c.delegate.PTTL(c.ctx, name).Result()
 }
 
 func (c *conn) Eval(script *redsyncredis.Script, keysAndArgs ...interface{}) (interface{}, error) {
@@ -57,13 +55,12 @@ func (c *conn) Eval(script *redsyncredis.Script, keysAndArgs ...interface{}) (in
 		for i := 0; i < script.KeyCount; i++ {
 			keys[i] = keysAndArgs[i].(string)
 		}
-
 		args = keysAndArgs[script.KeyCount:]
 	}
 
-	v, err := c.delegate.EvalSha(script.Hash, keys, args...).Result()
+	v, err := c.delegate.EvalSha(c.ctx, script.Hash, keys, args...).Result()
 	if err != nil && strings.HasPrefix(err.Error(), "NOSCRIPT ") {
-		v, err = c.delegate.Eval(script.Src, keys, args...).Result()
+		v, err = c.delegate.Eval(c.ctx, script.Src, keys, args...).Result()
 	}
 	return v, noErrNil(err)
 }
@@ -73,8 +70,16 @@ func (c *conn) Close() error {
 	return nil
 }
 
+func (c *conn) _context(ctx context.Context) context.Context {
+	if ctx != nil {
+		return ctx
+	}
+	return c.delegate.Context()
+}
+
 func noErrNil(err error) error {
 	if err == redis.Nil {
 		return nil
 	}
+	return err
 }

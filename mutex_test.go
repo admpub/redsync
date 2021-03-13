@@ -6,204 +6,232 @@ import (
 	"testing"
 	"time"
 
-	"github.com/admpub/redsync/redis/redigo"
-
-	"github.com/admpub/redsync/redis"
-	redigoredis "github.com/gomodule/redigo/redis"
-	"github.com/stvp/tempredis"
+	"github.com/admpub/redsync/v4/redis"
 )
 
 func TestMutex(t *testing.T) {
-	pools := newMockPools(8, servers)
-	mutexes := newTestMutexes(pools, "test-mutex", 8)
-	orderCh := make(chan int)
-	ctx := context.Background()
-	for i, mutex := range mutexes {
-		go func(i int, mutex *Mutex) {
-			err := mutex.Lock(ctx)
-			if err != nil {
-				t.Fatalf("Expected err == nil, got %q", err)
+	for k, v := range makeCases(8) {
+		t.Run(k, func(t *testing.T) {
+			mutexes := newTestMutexes(v.pools, "test-mutex", v.poolCount)
+			orderCh := make(chan int)
+			for i, mutex := range mutexes {
+				go func(i int, mutex *Mutex) {
+					err := mutex.Lock()
+					if err != nil {
+						t.Fatalf("mutex lock failed: %s", err)
+					}
+					defer mutex.Unlock()
+
+					assertAcquired(t, v.pools, mutex)
+
+					orderCh <- i
+				}(i, mutex)
 			}
-			defer mutex.Unlock(ctx)
-
-			assertAcquired(t, pools, mutex)
-
-			orderCh <- i
-		}(i, mutex)
-	}
-	for range mutexes {
-		<-orderCh
+			for range mutexes {
+				<-orderCh
+			}
+		})
 	}
 }
 
 func TestMutexExtend(t *testing.T) {
-	pools := newMockPools(8, servers)
-	mutexes := newTestMutexes(pools, "test-mutex-extend", 1)
-	mutex := mutexes[0]
+	for k, v := range makeCases(8) {
+		t.Run(k, func(t *testing.T) {
+			mutexes := newTestMutexes(v.pools, "test-mutex-extend", 1)
+			mutex := mutexes[0]
 
-	ctx := context.Background()
-	err := mutex.Lock(ctx)
-	if err != nil {
-		t.Fatalf("Expected err == nil, got %q", err)
+			err := mutex.Lock()
+			if err != nil {
+				t.Fatalf("mutex lock failed: %s", err)
+			}
+			defer mutex.Unlock()
+
+			time.Sleep(1 * time.Second)
+
+			expiries := getPoolExpiries(v.pools, mutex.name)
+			ok, err := mutex.Extend()
+			if err != nil {
+				t.Fatalf("mutex extend failed: %s", err)
+			}
+			if !ok {
+				t.Fatalf("Expected a valid mutex")
+			}
+			expiries2 := getPoolExpiries(v.pools, mutex.name)
+
+			for i, expiry := range expiries {
+				if expiry >= expiries2[i] {
+					t.Fatalf("Expected expiries[%d] > %d, got %d", i, expiry, expiries2[i])
+				}
+			}
+		})
 	}
-	defer mutex.Unlock(ctx)
+}
 
-	time.Sleep(1 * time.Second)
+func TestMutexExtendExpired(t *testing.T) {
+	for k, v := range makeCases(8) {
+		t.Run(k, func(t *testing.T) {
+			mutexes := newTestMutexes(v.pools, "test-mutex-extend", 1)
+			mutex := mutexes[0]
+			mutex.expiry = 500 * time.Millisecond
 
-	expiries := getPoolExpiries(pools, mutex.name)
-	ok, err := mutex.Extend(ctx)
-	if err != nil {
-		t.Fatalf("Expected err == nil, got %q", err)
+			err := mutex.Lock()
+			if err != nil {
+				t.Fatalf("mutex lock failed: %s", err)
+			}
+			defer mutex.Unlock()
+
+			time.Sleep(1 * time.Second)
+
+			ok, err := mutex.Extend()
+			if err != nil {
+				t.Fatalf("mutex extend failed: %s", err)
+			}
+			if ok {
+				t.Fatalf("Expected ok == false, got %v", ok)
+			}
+		})
 	}
-	if !ok {
-		t.Fatalf("Expected ok == true, got %v", ok)
-	}
-	expiries2 := getPoolExpiries(pools, mutex.name)
+}
 
-	for i, expiry := range expiries {
-		if expiry >= expiries2[i] {
-			t.Fatalf("Expected expiries[%d] > expiry, got %d %d", i, expiries2[i], expiry)
-		}
+func TestMutexUnlockExpired(t *testing.T) {
+	for k, v := range makeCases(8) {
+		t.Run(k, func(t *testing.T) {
+			mutexes := newTestMutexes(v.pools, "test-mutex-extend", 1)
+			mutex := mutexes[0]
+			mutex.expiry = 500 * time.Millisecond
+
+			err := mutex.Lock()
+			if err != nil {
+				t.Fatalf("mutex lock failed: %s", err)
+			}
+			defer mutex.Unlock()
+
+			time.Sleep(1 * time.Second)
+
+			ok, err := mutex.Unlock()
+			if err != nil {
+				t.Fatalf("mutex unlock failed: %s", err)
+			}
+			if ok {
+				t.Fatalf("Expected ok == false, got %v", ok)
+			}
+		})
 	}
 }
 
 func TestMutexQuorum(t *testing.T) {
-	pools := newMockPools(4, servers)
-	ctx := context.Background()
-	for mask := 0; mask < 1<<uint(len(pools)); mask++ {
-		mutexes := newTestMutexes(pools, "test-mutex-partial-"+strconv.Itoa(mask), 1)
-		mutex := mutexes[0]
-		mutex.tries = 1
+	for k, v := range makeCases(4) {
+		t.Run(k, func(t *testing.T) {
+			for mask := 0; mask < 1<<uint(len(v.pools)); mask++ {
+				mutexes := newTestMutexes(v.pools, "test-mutex-partial-"+strconv.Itoa(mask), 1)
+				mutex := mutexes[0]
+				mutex.tries = 1
 
-		n := clogPools(pools, mask, mutex)
+				n := clogPools(v.pools, mask, mutex)
 
-		if n >= len(pools)/2+1 {
-			err := mutex.Lock(ctx)
-			if err != nil {
-				t.Fatalf("Expected err == nil, got %q", err)
+				if n >= len(v.pools)/2+1 {
+					err := mutex.Lock()
+					if err != nil {
+						t.Fatalf("mutex lock failed: %s", err)
+					}
+					assertAcquired(t, v.pools, mutex)
+				} else {
+					err := mutex.Lock()
+					if err != ErrFailed {
+						t.Fatalf("Expected err == %q, got %q", ErrFailed, err)
+					}
+				}
 			}
-			assertAcquired(t, pools, mutex)
-		} else {
-			err := mutex.Lock(ctx)
-			if err != ErrFailed {
-				t.Fatalf("Expected err == %q, got %q", ErrFailed, err)
-			}
-		}
+		})
 	}
-}
-
-func TestMutexFailure(t *testing.T) {
-	var servers []*tempredis.Server
-	for i := 0; i < 8; i++ {
-		server, err := tempredis.Start(tempredis.Config{})
-		if err != nil {
-			panic(err)
-		}
-		servers = append(servers, server)
-	}
-	servers[2].Term()
-	servers[6].Term()
-
-	pools := newMockPools(8, servers)
-
-	okayPools := []redis.Pool{}
-	for i, v := range pools {
-		if i == 2 || i == 6 {
-			continue
-		}
-		okayPools = append(okayPools, v)
-	}
-
-	mutexes := newTestMutexes(pools, "test-mutex-extend", 1)
-	mutex := mutexes[0]
-	ctx := context.Background()
-
-	err := mutex.Lock(ctx)
-	if err != nil {
-		t.Fatalf("Expected err == nil, got %q", err)
-	}
-	defer mutex.Unlock(ctx)
-
-	assertAcquired(t, okayPools, mutex)
 }
 
 func TestValid(t *testing.T) {
-	pools := newMockPools(8, servers)
-	rs := New(pools)
-	key := "test-shared-lock"
+	for k, v := range makeCases(4) {
+		t.Run(k, func(t *testing.T) {
+			rs := New(v.pools...)
+			key := "test-shared-lock"
 
-	ctx := context.Background()
-	mutex1 := rs.NewMutex(key, SetExpiry(time.Hour))
-	err := mutex1.Lock(ctx)
-	if err != nil {
-		t.Fatalf("Expected err != nil, got: %q", err)
-	}
-	assertAcquired(t, pools, mutex1)
+			mutex1 := rs.NewMutex(key, WithExpiry(time.Hour))
+			err := mutex1.Lock()
+			if err != nil {
+				t.Fatalf("mutex lock failed: %s", err)
+			}
+			assertAcquired(t, v.pools, mutex1)
 
-	ok, err := mutex1.Valid(ctx)
-	if err != nil {
-		t.Fatalf("Expected err != nil, got: %q", err)
-	}
-	if !ok {
-		t.Fatalf("Expected a valid mutex")
-	}
+			ok, err := mutex1.Valid()
+			if err != nil {
+				t.Fatalf("mutex valid failed: %s", err)
+			}
+			if !ok {
+				t.Fatalf("Expected a valid mutex")
+			}
 
-	mutex2 := rs.NewMutex(key)
-	err = mutex2.Lock(ctx)
-	if err == nil {
-		t.Fatalf("Expected err == nil, got: %q", err)
+			mutex2 := rs.NewMutex(key)
+			err = mutex2.Lock()
+			if err == nil {
+				t.Fatalf("mutex lock failed: %s", err)
+			}
+		})
 	}
 }
 
-func newMockPools(n int, servers []*tempredis.Server) []redis.Pool {
-	pools := []redis.Pool{}
-	for _, server := range servers {
-		func(server *tempredis.Server) {
-			pools = append(pools, redigo.NewPool(&redigoredis.Pool{
-				MaxIdle:     3,
-				IdleTimeout: 240 * time.Second,
-				Dial: func() (redigoredis.Conn, error) {
-					return redigoredis.Dial("unix", server.Socket())
-				},
-				TestOnBorrow: func(c redigoredis.Conn, t time.Time) error {
-					_, err := c.Do("PING")
-					return err
-				},
-			}))
-		}(server)
-		if len(pools) == n {
-			break
-		}
+func TestMutexLockUnlockSplit(t *testing.T) {
+	for k, v := range makeCases(4) {
+		t.Run(k, func(t *testing.T) {
+			rs := New(v.pools...)
+			key := "test-split-lock"
+
+			mutex1 := rs.NewMutex(key, WithExpiry(time.Hour))
+			err := mutex1.Lock()
+			if err != nil {
+				t.Fatalf("mutex lock failed: %s", err)
+			}
+			assertAcquired(t, v.pools, mutex1)
+
+			mutex2 := rs.NewMutex(key, WithExpiry(time.Hour), WithValue(mutex1.Value()))
+			ok, err := mutex2.Unlock()
+			if err != nil {
+				t.Fatalf("mutex unlock failed: %s", err)
+			}
+			if !ok {
+				t.Fatalf("Expected a valid mutex")
+			}
+		})
 	}
 	return pools
 }
 
 func getPoolValues(pools []redis.Pool, name string) []string {
-	values := []string{}
-	ctx := context.Background()
-	for _, pool := range pools {
-		conn := pool.Get()
-		value, err := conn.Get(ctx, name)
-		conn.Close()
+	values := make([]string, len(pools))
+	for i, pool := range pools {
+		conn, err := pool.Get(nil)
 		if err != nil {
 			panic(err)
 		}
-		values = append(values, value)
+		value, err := conn.Get(name)
+		if err != nil {
+			panic(err)
+		}
+		_ = conn.Close()
+		values[i] = value
 	}
 	return values
 }
 
 func getPoolExpiries(pools []redis.Pool, name string) []int {
-	expiries := []int{}
-	ctx := context.Background()
-	for _, pool := range pools {
-		conn := pool.Get()
-		expiry, err := conn.PTTL(ctx, name)
-		conn.Close()
+	expiries := make([]int, len(pools))
+	for i, pool := range pools {
+		conn, err := pool.Get(nil)
 		if err != nil {
 			panic(err)
 		}
-		expiries = append(expiries, int(expiry))
+		expiry, err := conn.PTTL(name)
+		if err != nil {
+			panic(err)
+		}
+		_ = conn.Close()
+		expiries[i] = int(expiry)
 	}
 	return expiries
 }
@@ -216,20 +244,23 @@ func clogPools(pools []redis.Pool, mask int, mutex *Mutex) int {
 			n++
 			continue
 		}
-		conn := pool.Get()
-		_, err := conn.Set(ctx, mutex.name, "foobar")
-		conn.Close()
+		conn, err := pool.Get(nil)
 		if err != nil {
 			panic(err)
 		}
+		_, err = conn.Set(mutex.name, "foobar")
+		if err != nil {
+			panic(err)
+		}
+		_ = conn.Close()
 	}
 	return n
 }
 
 func newTestMutexes(pools []redis.Pool, name string, n int) []*Mutex {
-	mutexes := []*Mutex{}
+	mutexes := make([]*Mutex, n)
 	for i := 0; i < n; i++ {
-		mutexes = append(mutexes, &Mutex{
+		mutexes[i] = &Mutex{
 			name:         name,
 			expiry:       8 * time.Second,
 			tries:        32,
@@ -238,7 +269,7 @@ func newTestMutexes(pools []redis.Pool, name string, n int) []*Mutex {
 			factor:       0.01,
 			quorum:       len(pools)/2 + 1,
 			pools:        pools,
-		})
+		}
 	}
 	return mutexes
 }
